@@ -30,8 +30,8 @@ import (
 
 // cmdStats prints statistics about the program
 // Command is stats [all|general|closures]
-func cmdStats(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdStats(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : show stats about program\n", tt.Escape.Blue, cmdStatsName, tt.Escape.Reset)
 		writeFmt(tt, "\t  subcommands:\n")
 		writeFmt(tt, "\t    help : print help message\n")
@@ -46,18 +46,18 @@ func cmdStats(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) boo
 		return false
 	}
 	if funcutil.Contains(command.Args, "help") {
-		return cmdStats(tt, nil, command)
+		return cmdStats(tt, Command{Flags: map[string]bool{"h": true}})
 	}
 	all := funcutil.Contains(command.Args, "all")
 
 	// general ssa stats
 	if all || funcutil.Contains(command.Args, "general") || len(command.Args) == 0 {
-		doGeneralStats(tt, c, command)
+		doGeneralStats(tt, state.AnalyzerState, command)
 	}
 
 	// stats about closures
 	if all || funcutil.Contains(command.Args, "closures") {
-		doClosureStats(tt, c, command)
+		doClosureStats(tt, state.AnalyzerState, command)
 	}
 
 	return false

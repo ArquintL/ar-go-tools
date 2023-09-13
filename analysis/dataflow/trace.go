@@ -16,6 +16,8 @@ package dataflow
 
 import (
 	"strings"
+
+	"github.com/awslabs/ar-go-tools/internal/colors"
 )
 
 // KeyType is a value type to represents keys
@@ -200,10 +202,10 @@ func FuncNames(n *NodeTree[*CallNode]) string {
 	s := make([]string, n.height)
 	for cur := n; cur != nil; cur = cur.Parent {
 		if cur.height >= 1 {
-			s[cur.height-1] = "(" + cur.Label.LongID() + ")" + cur.Label.FuncName()
+			s[cur.height-1] = colors.Faint(cur.Label.LongID()) + "." + cur.Label.FuncName()
 		}
 	}
-	return strings.Join(s, "->")
+	return strings.Join(s, ", ")
 }
 
 // ClosureNames returns a string that contains all the closure names in the current trace

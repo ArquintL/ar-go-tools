@@ -129,7 +129,7 @@ func NodeSummary(g GraphNode) string {
 	case *CallNode:
 		return fmt.Sprintf("Result of call to %s", x.Callee().Name())
 	case *CallNodeArg:
-		return fmt.Sprintf("Argument %v in call to %s", x.Index(), x.ParentNode().Callee().Name())
+		return fmt.Sprintf("Argument #%v in call to %s", x.Index(), x.ParentNode().Callee().Name())
 	case *ReturnValNode:
 		return fmt.Sprintf("Return value of %s", x.ParentName())
 	case *ClosureNode:
@@ -139,9 +139,9 @@ func NodeSummary(g GraphNode) string {
 	case *SyntheticNode:
 		return fmt.Sprintf("Synthetic node")
 	case *BoundVarNode:
-		return "Bound variable"
+		return fmt.Sprintf("Bound variable %s in %s", x.ssaValue.String(), x.ParentName())
 	case *FreeVarNode:
-		return "Free variable"
+		return fmt.Sprintf("Free variable %s of %s", x.ssaNode.Name(), x.ParentName())
 	case *AccessGlobalNode:
 		return "Global "
 	}

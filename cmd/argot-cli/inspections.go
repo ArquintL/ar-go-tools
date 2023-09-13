@@ -19,14 +19,13 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/awslabs/ar-go-tools/analysis/dataflow"
 	"golang.org/x/term"
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
 )
 
-func cmdScan(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdScan(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : scan the program for usages\n", tt.Escape.Blue, cmdScanName, tt.Escape.Reset)
 		return false
 	}

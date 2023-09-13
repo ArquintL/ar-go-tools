@@ -45,7 +45,7 @@ func init() {
 var (
 	buildmode = ssa.InstantiateGenerics
 	version   = "unknown"
-	commands  = map[string]func(tt *term.Terminal, s *dataflow.AnalyzerState, command Command) bool{
+	commands  = map[string]func(tt *term.Terminal, command Command) bool{
 		cmdBuildGraphName:   cmdBuildGraph,
 		cmdCallersName:      cmdCallers,
 		cmdCalleesName:      cmdCallees,
@@ -87,8 +87,6 @@ Examples:
 Options:
 `
 
-// This is a simple stdin-stdout server to allow us to explore the code
-
 func main() {
 	var err error
 	flag.Parse()
@@ -115,7 +113,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "could not load config %s\n", *configPath)
 			return
 		}
-	} else if len(flag.Args()) == 1 && strings.HasSuffix(flag.Args()[0], ".go") {
+	} else if len(flag.Args()) >= 1 && strings.HasSuffix(flag.Args()[0], ".go") {
 		// Special case: look for config in .go 's folder
 		dir := path.Dir(flag.Args()[0])
 		configfile := path.Join(dir, "config.yaml")
@@ -127,7 +125,6 @@ func main() {
 		} else {
 			pConfig = tmpConfig
 			state.ConfigPath = configfile
-
 		}
 	}
 
@@ -171,6 +168,7 @@ func main() {
 
 // run implements the command line tool, calling interpret for each command until the exit command is input
 func run(c *dataflow.AnalyzerState) {
+	state.AnalyzerState = c
 	oldState /* const */, err := term.MakeRaw(int(os.Stdin.Fd()))
 	state.TermWidth, _, _ = term.GetSize(int(os.Stdin.Fd()))
 	if err != nil {
@@ -189,17 +187,24 @@ func run(c *dataflow.AnalyzerState) {
 	// the infinite loop terminates when interpret returns true
 	for {
 		command, _ := tt.ReadLine()
-		if interpret(tt, c, strings.TrimSpace(command)) {
+		if interpret(tt, strings.TrimSpace(command)) {
 			break
 		}
 	}
 }
 
 // interpret returns true to stop
-func interpret(tt *term.Terminal, c *dataflow.AnalyzerState, command string) bool {
+func interpret(tt *term.Terminal, command string) bool {
 	if command == "" {
 		return false
 	}
+
+	// The analyzer state should never be nil!
+	if state.AnalyzerState == nil {
+		WriteErr(tt, "The analyzer state is nil due to an internal error. Exiting...")
+		return true
+	}
+
 	cmd := ParseCommand(command)
 
 	if cmd.Name == "" {
@@ -207,13 +212,13 @@ func interpret(tt *term.Terminal, c *dataflow.AnalyzerState, command string) boo
 	}
 
 	if f, ok := commands[cmd.Name]; ok {
-		return f(tt, c, cmd)
+		return f(tt, cmd)
 	} else {
 		if cmd.Name == cmdHelpName {
-			cmdHelp(tt, c, cmd)
+			cmdHelp(tt, cmd)
 		} else {
 			WriteErr(tt, "Command name \"%s\" not recognized.", cmd.Name)
-			cmdHelp(tt, c, cmd)
+			cmdHelp(tt, cmd)
 		}
 		return false
 	}

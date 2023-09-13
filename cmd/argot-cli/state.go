@@ -40,27 +40,29 @@ type serverState struct {
 	CurrentFunction *ssa.Function
 
 	CurrentDataflowInformation *dataflow.FlowInformation
+
+	AnalyzerState *dataflow.AnalyzerState
 }
 
 var state = serverState{}
 
 // Help command
-func cmdHelp(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
-	if c == nil {
+func cmdHelp(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : print help message\t", cmdHelpName, tt.Escape.Blue, tt.Escape.Reset)
 		return false
 	}
 	writeFmt(tt, "Commands:\n")
 	writeFmt(tt, "\t- %s%s%s : print this message\n", tt.Escape.Blue, cmdHelpName, tt.Escape.Reset)
 	for _, cmd := range commands {
-		cmd(tt, nil, Command{})
+		cmd(tt, Command{Flags: map[string]bool{"h": true}})
 	}
 	return false
 }
 
 // cmdState implements the "state?" command, which prints information about the current state of the tool
-func cmdState(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
-	if c == nil {
+func cmdState(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : print information about the current state\n",
 			tt.Escape.Blue, cmdStateName, tt.Escape.Reset)
 		return false
@@ -74,15 +76,15 @@ func cmdState(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
 	writeFmt(tt, "Config path       : %s\n", state.ConfigPath)
 	writeFmt(tt, "Working dir       : %s\n", wd)
 	writeFmt(tt, "Focused function  : %s\n", fName)
-	writeFmt(tt, "# functions       : %d\n", len(ssautil.AllFunctions(c.Program)))
-	writeFmt(tt, "# summaries built : %d\n", len(c.FlowGraph.Summaries))
-	writeFmt(tt, "flow graph built? : %t\n", c.FlowGraph.IsBuilt())
+	writeFmt(tt, "# functions       : %d\n", len(ssautil.AllFunctions(state.AnalyzerState.Program)))
+	writeFmt(tt, "# summaries built : %d\n", len(state.AnalyzerState.FlowGraph.Summaries))
+	writeFmt(tt, "flow graph built? : %t\n", state.AnalyzerState.FlowGraph.IsBuilt())
 	return false
 }
 
 // cmdList shows all functions matching a given regex
-func cmdList(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdList(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : list all functions matching provided regexes\n",
 			tt.Escape.Blue, cmdListName, tt.Escape.Reset)
 		writeFmt(tt, "\t  Options:\n")
@@ -92,17 +94,13 @@ func cmdList(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool
 		return false
 	}
 
-	if command.Flags["h"] {
-		return cmdList(tt, nil, command)
-	}
-
-	funcs := funcsMatchingCommand(tt, c, command)
+	funcs := funcsMatchingCommand(tt, state.AnalyzerState, command)
 	if len(funcs) == 0 {
 		WriteSuccess(tt, "No matching function found.")
 		return false
 	}
 
-	reachable := c.ReachableFunctions(false, false)
+	reachable := state.AnalyzerState.ReachableFunctions(false, false)
 
 	WriteSuccess(tt, "Found %d matching functions:", len(funcs))
 	WriteSuccess(tt, "[summarized?][reachable?] function name")
@@ -110,7 +108,7 @@ func cmdList(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool
 	numSummarized := 0
 	numReachable := 0
 	for _, fun := range funcs {
-		_, hasSummary := c.FlowGraph.Summaries[fun]
+		_, hasSummary := state.AnalyzerState.FlowGraph.Summaries[fun]
 		isReachable := reachable[fun]
 		reachStr := "_"
 		if isReachable {

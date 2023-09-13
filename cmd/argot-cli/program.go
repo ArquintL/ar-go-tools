@@ -28,8 +28,8 @@ import (
 
 // cmdLoad implements the "load" command that loads a program into the tool.
 // Once it updates the state.Args, it calls the rebuild command to build the program and the state.
-func cmdLoad(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdLoad(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : load new program\n", tt.Escape.Blue, cmdLoadName, tt.Escape.Reset)
 		return false
 	}
@@ -39,13 +39,13 @@ func cmdLoad(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool
 		return false
 	}
 	state.Args = command.Args
-	return cmdRebuild(tt, c, command)
+	return cmdRebuild(tt, command)
 }
 
 // cmdRebuild implements the rebuild command. It reloads the current program and rebuilds the state including the
 // pointer analysis and callgraph information.
-func cmdRebuild(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
-	if c == nil {
+func cmdRebuild(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : rebuild the program being analyzed, including analyzer state.\n",
 			tt.Escape.Blue, cmdRebuildName, tt.Escape.Reset)
 		return false
@@ -65,15 +65,20 @@ func cmdRebuild(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
 	}
 	initialPackages, _ := packages.Load(p, flag.Args()...)
 	state.InitialPackages = initialPackages
+
 	// Build the newState with all analyses
-	newState, err := dataflow.NewInitializedAnalyzerState(c.Logger, c.Config, program)
+	newState, err := dataflow.NewInitializedAnalyzerState(
+		state.AnalyzerState.Logger,
+		state.AnalyzerState.Config,
+		program)
+
 	if err != nil {
 		WriteErr(tt, "error building analyzer state: %s", err)
 		WriteErr(tt, "state is left unchanged")
 		return false
 	}
 	// Optional step: running the escape analysis
-	if c.Config.UseEscapeAnalysis {
+	if state.AnalyzerState.Config.UseEscapeAnalysis {
 		err := escape.InitializeEscapeAnalysisState(newState)
 		if err != nil {
 			WriteErr(tt, "error running escape analysis: %s", err)
@@ -82,14 +87,14 @@ func cmdRebuild(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
 		}
 	}
 	// Reassign state elements
-	c = newState
+	state.AnalyzerState = newState
 	return false
 }
 
 // cmdReconfig implements the reconfig command and reloads the configuration file. If a new config file is specified,
 // then it will load that new config file.
-func cmdReconfig(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdReconfig(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : load the specified config file\n",
 			tt.Escape.Blue, cmdReconfigName, tt.Escape.Reset)
 		writeFmt(tt, "\t    Example: %s config.yaml\n", cmdReconfigName)
@@ -118,7 +123,7 @@ func cmdReconfig(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) 
 		return false
 	}
 
-	c.Config = newConfig
+	state.AnalyzerState.Config = newConfig
 	if len(command.Args) < 1 {
 		WriteSuccess(tt, "Reloaded config from disk.")
 	} else {

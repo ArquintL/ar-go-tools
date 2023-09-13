@@ -40,8 +40,8 @@ import (
 // If state is nil, then it should print its definition on stdout
 
 // cmdShowSsa prints the SSA representation of all the function matching a given regex
-func cmdShowSsa(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdShowSsa(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : print the ssa representation of a function.\n"+
 			"\t  showssa regex prints the SSA representation of the function matching the regex\n"+
 			"\t  Example:\n", tt.Escape.Blue, cmdShowSsaName, tt.Escape.Reset)
@@ -57,7 +57,7 @@ func cmdShowSsa(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) b
 			b.Reset()
 		} else {
 			WriteErr(tt, "Need at least one function to show.")
-			cmdShowSsa(tt, nil, command)
+			cmdShowSsa(tt, Command{Flags: map[string]bool{"h": true}})
 		}
 		return false
 	}
@@ -67,7 +67,7 @@ func cmdShowSsa(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) b
 		return false
 	}
 	var b bytes.Buffer
-	funcs := findFunc(c, target)
+	funcs := findFunc(state.AnalyzerState, target)
 	for _, f := range funcs {
 		ssa.WriteFunction(&b, f)
 		_, _ = b.WriteTo(tt)
@@ -77,8 +77,8 @@ func cmdShowSsa(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) b
 }
 
 // cmdShowEscape prints the escape graph of all the function matching a given regex
-func cmdShowEscape(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdShowEscape(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : print the escape graph of a function.\n"+
 			"\t  %s regex prints the escape graph of function(s) matching the regex\n"+
 			"\t  Example:\n", tt.Escape.Blue, cmdShowEscapeName, tt.Escape.Reset, cmdShowEscapeName)
@@ -95,7 +95,7 @@ func cmdShowEscape(tt *term.Terminal, c *dataflow.AnalyzerState, command Command
 			b.Reset()
 		} else {
 			WriteErr(tt, "Need at least one function to show.")
-			cmdShowSsa(tt, nil, command)
+			cmdShowEscape(tt, Command{Flags: map[string]bool{"h": true}})
 		}
 		return false
 	}
@@ -105,7 +105,7 @@ func cmdShowEscape(tt *term.Terminal, c *dataflow.AnalyzerState, command Command
 		return false
 	}
 	var b bytes.Buffer
-	funcs := findFunc(c, target)
+	funcs := findFunc(state.AnalyzerState, target)
 	for _, f := range funcs {
 		eg := escape.EscapeSummary(f)
 		b.WriteString(eg.Graphviz())
@@ -117,8 +117,8 @@ func cmdShowEscape(tt *term.Terminal, c *dataflow.AnalyzerState, command Command
 
 // cmdShowDataflow builds and prints the inter-procedural dataflow graph.
 // If on macOS, the command automatically renders an SVG and opens it in Safari.
-func cmdShowDataflow(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
-	if c == nil {
+func cmdShowDataflow(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : build and print the inter-procedural dataflow graph of a program.\n"+
 			"\t  showdataflow args prints the inter-procedural dataflow graph.\n"+
 			"\t    on macOS, the command also renders an SVG of the graph and opens it in Safari\n"+
@@ -130,12 +130,12 @@ func cmdShowDataflow(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bo
 	// TODO the dataflow graph from the CLI is slightly different from the
 	// `render` tool. This is because some function parameters are not being
 	// visited. The refactor should address this.
-	var err error
-	c, err = render.BuildCrossFunctionGraph(c)
+	c, err := render.BuildCrossFunctionGraph(state.AnalyzerState)
 	if err != nil {
 		WriteErr(tt, "Failed to build inter-procedural graph: %v\n", err)
 		return false
 	}
+	state.AnalyzerState = c
 	var b bytes.Buffer
 	c.FlowGraph.Print(&b)
 
@@ -171,8 +171,8 @@ func cmdShowDataflow(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bo
 }
 
 // cmdSummary prints a specific function's summary, if it can be found
-func cmdSummary(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdSummary(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : print the summary of the functions matching a regex\n",
 			tt.Escape.Blue, cmdSummaryName, tt.Escape.Reset)
 		return false
@@ -183,7 +183,7 @@ func cmdSummary(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) b
 			WriteErr(tt, "Not enough arguments, summary expects 1 argument")
 		}
 		// Print summary of focused function
-		summary := c.FlowGraph.Summaries[state.CurrentFunction]
+		summary := state.AnalyzerState.FlowGraph.Summaries[state.CurrentFunction]
 		if summary != nil {
 			printSummary(tt, command, summary)
 		} else {
@@ -192,12 +192,12 @@ func cmdSummary(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) b
 		return false
 	}
 
-	funcs := funcsMatchingCommand(tt, c, command)
+	funcs := funcsMatchingCommand(tt, state.AnalyzerState, command)
 	numSummaries := 0
 	numFuncs := 0
 	for _, fun := range funcs {
 		numFuncs++
-		summary := c.FlowGraph.Summaries[fun]
+		summary := state.AnalyzerState.FlowGraph.Summaries[fun]
 		if summary != nil {
 			numSummaries++
 			printSummary(tt, command, summary)
@@ -218,8 +218,8 @@ func cmdSummary(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) b
 }
 
 // cmdSummarize runs the intra-procedural analysis.
-func cmdSummarize(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdSummarize(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : run the intra-procedural analysis. If a function is provided, "+
 			"run only\n", tt.Escape.Blue, cmdSummarizeName, tt.Escape.Reset)
 		writeFmt(tt, "\t   on the provided function\n")
@@ -249,7 +249,7 @@ func cmdSummarize(tt *term.Terminal, c *dataflow.AnalyzerState, command Command)
 			createCounter++
 			return b
 		}
-		analysis.RunIntraProceduralPass(c, numRoutines, analysis.IntraAnalysisParams{
+		analysis.RunIntraProceduralPass(state.AnalyzerState, numRoutines, analysis.IntraAnalysisParams{
 			ShouldBuildSummary: shouldBuildSummary,
 			IsEntrypoint:       taint.IsSomeSourceNode,
 		})
@@ -261,7 +261,7 @@ func cmdSummarize(tt *term.Terminal, c *dataflow.AnalyzerState, command Command)
 			regexErr(tt, command.Args[0], err)
 			return false
 		}
-		funcs := findFunc(c, regex)
+		funcs := findFunc(state.AnalyzerState, regex)
 		WriteSuccess(tt, "Running intra-procedural analysis on functions matching %s", command.Args[0])
 
 		// Depending on the summaries threshold and the number of matched functions, different filters are used.
@@ -280,7 +280,7 @@ func cmdSummarize(tt *term.Terminal, c *dataflow.AnalyzerState, command Command)
 		}
 
 		// Run the analysis with the filter.
-		analysis.RunIntraProceduralPass(c, numRoutines, analysis.IntraAnalysisParams{
+		analysis.RunIntraProceduralPass(state.AnalyzerState, numRoutines, analysis.IntraAnalysisParams{
 			ShouldBuildSummary: shouldBuildSummary,
 			IsEntrypoint:       taint.IsSomeSourceNode,
 		})
@@ -325,39 +325,41 @@ func alwaysSummarize(funcs []*ssa.Function, buildCounter *int) func(*dataflow.An
 }
 
 // cmdTaint runs the taint analysis
-func cmdTaint(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
-	if c == nil {
+func cmdTaint(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s: run the taint analysis with parameters in config.\n",
 			tt.Escape.Blue, cmdTaintName, tt.Escape.Reset)
 		writeFmt(tt, "\t   Flow graph must be built first with `%s%s%s`.\n",
 			tt.Escape.Yellow, cmdBuildGraphName, tt.Escape.Reset)
 		return false
 	}
-	if !c.FlowGraph.IsBuilt() {
+	if !state.AnalyzerState.FlowGraph.IsBuilt() {
 		WriteErr(tt, "The inter-procedural dataflow graph is not built!")
 		WriteErr(tt, "Please run `%s` before calling `taint`.", cmdBuildGraphName)
 		return false
 	}
-	for _, ts := range c.Config.TaintTrackingProblems {
-		c.FlowGraph.RunVisitorOnEntryPoints(taint.NewVisitor(&ts),
+
+	for _, ts := range state.AnalyzerState.Config.TaintTrackingProblems {
+		state.AnalyzerState.FlowGraph.RunVisitorOnEntryPoints(taint.NewVisitor(&ts),
 			func(node ssa.Node) bool {
 				return taint.IsSourceNode(&ts, node)
 			},
 			nil)
 	}
+
 	return false
 }
 
 // cmdBacktrace runs the backtrace analysis.
-func cmdBacktrace(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
-	if c == nil {
+func cmdBacktrace(tt *term.Terminal, commmand Command) bool {
+	if commmand.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s: run the backtrace analysis with parameters in config.\n",
 			tt.Escape.Blue, cmdTaintName, tt.Escape.Reset)
 		writeFmt(tt, "\t   Flow graph must be built first with `%s%s%s`.\n",
 			tt.Escape.Yellow, cmdBuildGraphName, tt.Escape.Reset)
 		return false
 	}
-	if !c.FlowGraph.IsBuilt() {
+	if !state.AnalyzerState.FlowGraph.IsBuilt() {
 		WriteErr(tt, "The inter-procedural dataflow graph is not built!")
 		WriteErr(tt, "Please run `%s` before calling `backtrace`.", cmdBuildGraphName)
 		return false
@@ -366,10 +368,10 @@ func cmdBacktrace(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool 
 	// TODO this technically needs summaries that are built with backtrace.IsEntrypoint,
 	// not taint.IsSourceNode
 	var traces [][]dataflow.GraphNode
-	for _, ps := range c.Config.SlicingProblems {
+	for _, ps := range state.AnalyzerState.Config.SlicingProblems {
 		visitor := &backtrace.Visitor{}
 		visitor.SlicingSpec = &ps
-		c.FlowGraph.RunVisitorOnEntryPoints(visitor, func(node ssa.Node) bool {
+		state.AnalyzerState.FlowGraph.RunVisitorOnEntryPoints(visitor, func(node ssa.Node) bool {
 			return backtrace.IsInterProceduralEntryPoint(&ps, node)
 		}, nil)
 
@@ -377,7 +379,7 @@ func cmdBacktrace(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool 
 	}
 
 	writeFmt(tt, "Traces:\n")
-	for _, trace := range backtrace.Traces(c, traces) {
+	for _, trace := range backtrace.Traces(state.AnalyzerState, traces) {
 		writeFmt(tt, "%v\n", trace)
 	}
 

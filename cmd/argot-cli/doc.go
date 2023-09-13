@@ -23,12 +23,12 @@ Usage:
 
 The flags are:
 
-	-verbose=false
-		verbose mode, overrides any verbose option specified in the config file
-	-config config-file.yaml
-		a configuration file for the analyses. The configuration file can be empty, but should always be specified.
-		If [program files] is only one main.go file, the program will look for a file config.yaml in the same folder
-		as the config file.
+		-verbose=false
+			verbose mode, overrides any verbose option specified in the config file
+		-config config-file.yaml
+			a configuration file for the analyses. The configuration file can be empty, but should always be specified.
+			If the config file is not specified but the user has specified some program files, the program will look for
+	        a config file names "config.yaml" in the same folder as the first program file.
 
 There are 29 commands you can use once you have started the argot-cli and your program has been loaded and some
 information has been collected.

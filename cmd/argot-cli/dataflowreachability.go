@@ -24,8 +24,8 @@ import (
 )
 
 // cmdTrace runs a taint-like analysis, but starting from a custom node
-func cmdTrace(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdTrace(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s: show information about nodes reachable from another node using data edges\n",
 			tt.Escape.Blue, cmdTraceName, tt.Escape.Reset)
 		writeFmt(tt, "\t    Argument is a regex matching node ids.")
@@ -34,7 +34,7 @@ func cmdTrace(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) boo
 		return false
 	}
 
-	if !c.FlowGraph.IsBuilt() {
+	if !state.AnalyzerState.FlowGraph.IsBuilt() {
 		WriteErr(tt, "The inter-procedural dataflow graph is not built!")
 		WriteErr(tt, "Please run `%s` before calling `taint`.", cmdBuildGraphName)
 		return false
@@ -49,15 +49,15 @@ func cmdTrace(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) boo
 		regexErr(tt, command.Args[0], err)
 		return false
 	}
-	preLevel := c.Logger.Level
+	preLevel := state.AnalyzerState.Logger.Level
 
 	if command.Flags["t"] {
-		c.Logger.Level = config.TraceLevel
+		state.AnalyzerState.Logger.Level = config.TraceLevel
 	}
 	dummySpec := &config.TaintSpec{}
-	c.FlowGraph.RunVisitorOnEntryPoints(taint.NewVisitor(dummySpec), nil,
+	state.AnalyzerState.FlowGraph.RunVisitorOnEntryPoints(taint.NewVisitor(dummySpec), nil,
 		func(g dataflow.GraphNode) bool { return r.MatchString(g.LongID()) })
 
-	c.Logger.Level = preLevel
+	state.AnalyzerState.Logger.Level = preLevel
 	return false
 }

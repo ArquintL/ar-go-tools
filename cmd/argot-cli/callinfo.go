@@ -23,8 +23,9 @@ import (
 )
 
 // cmdCallers shows the callers of a given summarized function
-func cmdCallers(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdCallers(tt *term.Terminal, command Command) bool {
+	c := state.AnalyzerState
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s: shows the callers of a given summarized function.\n",
 			tt.Escape.Blue, cmdCallersName, tt.Escape.Reset)
 		writeFmt(tt, "\t    %s will only be accurate after `%s%s%s`.\n",
@@ -40,8 +41,9 @@ func cmdCallers(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) b
 }
 
 // cmdCallees shows the callers of a given summarized function
-func cmdCallees(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdCallees(tt *term.Terminal, command Command) bool {
+	c := state.AnalyzerState
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s: shows the callees of a given summarized function.\n",
 			tt.Escape.Blue, cmdCalleesName, tt.Escape.Reset)
 		writeFmt(tt, "\t    %s will only be accurate after `%s%s%s`.\n",

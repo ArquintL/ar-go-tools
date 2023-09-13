@@ -29,15 +29,15 @@ import (
 )
 
 // cmdFocus puts a given function into focus by setting state.CurrentFunction
-func cmdFocus(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdFocus(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s: focus on a specific function.\n", tt.Escape.Blue, cmdFocusName,
 			tt.Escape.Reset)
 		writeFmt(tt, "\t   Once a function is focused, queries can be made about types, aliasing, etc.\n")
 		return false
 	}
 
-	funcs := funcsMatchingCommand(tt, c, command)
+	funcs := funcsMatchingCommand(tt, state.AnalyzerState, command)
 
 	if len(funcs) == 0 {
 		WriteErr(tt, "No matching function.")
@@ -67,8 +67,8 @@ func cmdFocus(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) boo
 }
 
 // cmdPackage prints information about the package of the current function
-func cmdPackage(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdPackage(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		if state.CurrentFunction != nil {
 			writeFmt(tt, "\t- %s%s%s: show package of current function.\n", tt.Escape.Blue, cmdPackageName,
 				tt.Escape.Reset)
@@ -100,8 +100,8 @@ func cmdPackage(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) b
 }
 
 // cmdUnfocus removes the focus on the current function (sets state.CurrentFunction to nil and resets the prompt)
-func cmdUnfocus(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
-	if c == nil {
+func cmdUnfocus(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		if state.CurrentFunction != nil {
 			writeFmt(tt, "\t- %s%s%s: unfocus current function.\n", tt.Escape.Blue,
 				cmdUnfocusName, tt.Escape.Reset)
@@ -122,8 +122,8 @@ func cmdUnfocus(tt *term.Terminal, c *dataflow.AnalyzerState, _ Command) bool {
 }
 
 // cmdSsaValue prints the ssa values matching a regex in the state.CurrentFunction
-func cmdSsaValue(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdSsaValue(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		if state.CurrentFunction != nil {
 			writeFmt(tt, "\t- %s%s%s: show SSA values matching regex\n", tt.Escape.Blue,
 				cmdSsaValueName, tt.Escape.Reset)
@@ -147,6 +147,8 @@ func cmdSsaValue(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) 
 		return false
 	}
 
+	c := state.AnalyzerState
+
 	for _, param := range state.CurrentFunction.Params {
 		if matchValue(r, param) {
 			showValue(tt, c, param)
@@ -155,14 +157,14 @@ func cmdSsaValue(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) 
 
 	for _, fv := range state.CurrentFunction.FreeVars {
 		if matchValue(r, fv) {
-			showValue(tt, c, fv)
+			showValue(tt, state.AnalyzerState, fv)
 		}
 	}
 
 	for _, block := range state.CurrentFunction.Blocks {
 		for _, instr := range block.Instrs {
 			if val, isVal := instr.(ssa.Value); isVal && matchValue(r, val) {
-				showValue(tt, c, val)
+				showValue(tt, state.AnalyzerState, val)
 			}
 		}
 	}
@@ -170,8 +172,8 @@ func cmdSsaValue(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) 
 }
 
 // cmdSsaInstr prints the ssa instructions matching a regex in the state.CurrentFunction
-func cmdSsaInstr(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdSsaInstr(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		if state.CurrentFunction != nil {
 			writeFmt(tt, "\t- %s%s%s: show SSA instructions matching regex\n", tt.Escape.Blue,
 				cmdSsaInstrName, tt.Escape.Reset)
@@ -198,7 +200,7 @@ func cmdSsaInstr(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) 
 	for _, block := range state.CurrentFunction.Blocks {
 		for _, instr := range block.Instrs {
 			if matchInstr(r, instr) {
-				showInstr(tt, c, instr)
+				showInstr(tt, state.AnalyzerState, instr)
 			}
 		}
 	}
@@ -206,8 +208,8 @@ func cmdSsaInstr(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) 
 }
 
 // cmdMayAlias prints whether matches values may alias according to the pointer analysis
-func cmdMayAlias(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdMayAlias(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		if state.CurrentFunction != nil {
 			writeFmt(tt, "\t- %s%s%s: print whether matching values may alias\n", tt.Escape.Blue,
 				cmdMayAliasName, tt.Escape.Reset)
@@ -240,20 +242,22 @@ func cmdMayAlias(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) 
 		}
 	})
 
+	s := state.AnalyzerState
+
 	for v1 := range values1 {
-		if ptr, ptrExists := c.PointerAnalysis.Queries[v1]; ptrExists {
+		if ptr, ptrExists := state.AnalyzerState.PointerAnalysis.Queries[v1]; ptrExists {
 			writeFmt(tt, "[direct]   %s may alias with:\n", v1.Name())
 			lang.IterateValues(state.CurrentFunction, func(_ int, value ssa.Value) {
 				if value != nil {
-					printAliases(tt, c, value, ptr)
+					printAliases(tt, state.AnalyzerState, value, ptr)
 				}
 			})
 		}
-		if ptr, ptrExists := c.PointerAnalysis.IndirectQueries[v1]; ptrExists {
+		if ptr, ptrExists := s.PointerAnalysis.IndirectQueries[v1]; ptrExists {
 			writeFmt(tt, "[indirect] %s may alias with:\n", v1.Name())
 			lang.IterateValues(state.CurrentFunction, func(_ int, value ssa.Value) {
 				if value != nil {
-					printAliases(tt, c, value, ptr)
+					printAliases(tt, state.AnalyzerState, value, ptr)
 				}
 			})
 		}
@@ -273,18 +277,19 @@ func printAliases(tt *term.Terminal, c *dataflow.AnalyzerState, v2 ssa.Value, pt
 }
 
 // cmdWhere prints the position of a function
-func cmdWhere(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdWhere(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s : print the location of a function declaration.\n",
 			tt.Escape.Blue, cmdWhereName, tt.Escape.Reset)
 		return false
 	}
 	if len(command.Args) < 1 {
 		if state.CurrentFunction != nil {
-			writeFmt(tt, "Location: %s\n", c.Program.Fset.Position(state.CurrentFunction.Pos()))
+			writeFmt(tt, "Location: %s\n",
+				state.AnalyzerState.Program.Fset.Position(state.CurrentFunction.Pos()))
 		} else {
 			WriteErr(tt, "Need at least one function to print position for.")
-			cmdWhere(tt, nil, command)
+			cmdWhere(tt, Command{Flags: map[string]bool{"h": true}})
 		}
 		return false
 	}
@@ -294,16 +299,16 @@ func cmdWhere(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) boo
 		return false
 	}
 
-	funcs := findFunc(c, target)
+	funcs := findFunc(state.AnalyzerState, target)
 	for _, f := range funcs {
-		writeFmt(tt, "Location: %s\n", c.Program.Fset.Position(f.Pos()))
+		writeFmt(tt, "Location: %s\n", state.AnalyzerState.Program.Fset.Position(f.Pos()))
 	}
 	return false
 }
 
 // cmdIntra shows the intermediate result of running the dataflow analysis.
-func cmdIntra(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdIntra(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s: show the intermediate result of the intraprocedural analysis\n",
 			tt.Escape.Blue, cmdIntraName, tt.Escape.Reset)
 		writeFmt(tt, "\t    -v    print the intermediate result every time a block is analyzed\n")
@@ -315,10 +320,6 @@ func cmdIntra(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) boo
 		}
 
 		return false
-	}
-
-	if command.Flags["h"] {
-		return cmdIntra(tt, nil, command)
 	}
 
 	if state.CurrentFunction == nil {
@@ -334,14 +335,14 @@ func cmdIntra(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) boo
 			if block := a.Block(); block != nil {
 				writeFmt(tt, "\n")
 				writeFmt(tt, "---- New block analyzed ----\n")
-				showBlock(tt, c, block)
+				showBlock(tt, block)
 				writeFmt(tt, "     State is ↴\n")
 			}
-			showFlowInformation(tt, c, flowInfo)
+			showFlowInformation(tt, state.AnalyzerState, flowInfo)
 		}
 	}
 
-	_, err := dataflow.IntraProceduralAnalysis(c, state.CurrentFunction, true, 0,
+	_, err := dataflow.IntraProceduralAnalysis(state.AnalyzerState, state.CurrentFunction, true, 0,
 		taint.IsSomeSourceNode, post)
 	if err != nil {
 		WriteErr(tt, "Error while analyzing.")
@@ -354,7 +355,7 @@ func cmdIntra(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) boo
 			writeFmt(tt, " ⎏  Final state is ↴\n")
 		}
 		writeFmt(tt, "[function %s%s%s]\n", tt.Escape.Cyan, flowInfo.Function.Name(), tt.Escape.Reset)
-		showFlowInformation(tt, c, flowInfo)
+		showFlowInformation(tt, state.AnalyzerState, flowInfo)
 	} else {
 		WriteErr(tt, "Flow information is nil after analysis. Something went wrong?")
 	}
@@ -362,8 +363,8 @@ func cmdIntra(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) boo
 }
 
 // cmdMark shows intermediate information about a mark in the dataflow analysis
-func cmdMark(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool {
-	if c == nil {
+func cmdMark(tt *term.Terminal, command Command) bool {
+	if command.Flags["h"] {
 		writeFmt(tt, "\t- %s%s%s: show information about a mark in the intraprocedural analysis\n",
 			tt.Escape.Blue, cmdMarkName, tt.Escape.Reset)
 		writeFmt(tt, "\t          (only in focused mode)\n")
@@ -377,13 +378,9 @@ func cmdMark(tt *term.Terminal, c *dataflow.AnalyzerState, command Command) bool
 		WriteErr(tt, "Example: > focus command-line-arguments.main")
 	}
 
-	if command.Flags["h"] {
-		return cmdMark(tt, nil, command)
-	}
-
 	if state.CurrentDataflowInformation == nil || state.CurrentDataflowInformation.Function != state.CurrentFunction {
 		writeFmt(tt, "Running the intra-procedural dataflow analysis first...\n")
-		_ = cmdIntra(tt, c, command)
+		_ = cmdIntra(tt, command)
 	}
 
 	r, err := regexp.Compile(command.Args[0])
@@ -547,7 +544,7 @@ func showFlowInformation(tt *term.Terminal, c *dataflow.AnalyzerState, fi *dataf
 }
 
 // showBlock pretty prints the block on the terminal
-func showBlock(tt *term.Terminal, c *dataflow.AnalyzerState, block *ssa.BasicBlock) {
+func showBlock(tt *term.Terminal, block *ssa.BasicBlock) {
 	writeFmt(tt, "block %d:\n", block.Index)
 	writeFmt(tt, "%s P:%d S:%d\n", block.Comment, len(block.Preds), len(block.Succs))
 
