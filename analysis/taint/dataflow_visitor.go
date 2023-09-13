@@ -80,6 +80,10 @@ func (v *Visitor) Reset() {
 	v.seen = make(map[df.KeyType]bool)
 }
 
+func (v *Visitor) SetCoverageWriter(w io.StringWriter) {
+	v.coverageWriter = w
+}
+
 // Visit runs an inter-procedural analysis to add any detected taint flow from currentSource to a sink. This implements
 // the visitor interface of the dataflow package.
 //

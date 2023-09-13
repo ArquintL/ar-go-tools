@@ -18,6 +18,7 @@ package render
 
 import (
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/awslabs/ar-go-tools/analysis"
@@ -45,6 +46,11 @@ func BuildCrossFunctionGraph(state *dataflow.AnalyzerState) (*dataflow.AnalyzerS
 // CrossFunctionGraphVisitor represents a visitor that builds the state's
 // FlowGraph.
 type CrossFunctionGraphVisitor struct{}
+
+// SetCoverageWriter is a no-op for a CrossFunctionGraphVisitor
+func (v CrossFunctionGraphVisitor) SetCoverageWriter(_ io.StringWriter) {
+
+}
 
 // Visit is a SourceVisitor that builds adds edges between the
 // individual intra-procedural dataflow graphs reachable from source.

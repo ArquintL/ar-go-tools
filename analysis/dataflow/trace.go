@@ -93,7 +93,7 @@ func (n *NodeTree[T]) String() string {
 			s[cur.height-1] = cur.Label.String()
 		}
 	}
-	return strings.Join(s, "_")
+	return strings.Join(s, ", ")
 }
 
 // Len returns the height of the node tree (length of a path from the root to the current node

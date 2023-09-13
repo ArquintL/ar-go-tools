@@ -21,6 +21,7 @@ package backtrace
 import (
 	"fmt"
 	"go/token"
+	"io"
 	"runtime"
 	"strings"
 
@@ -137,6 +138,9 @@ type Visitor struct {
 	SlicingSpec *config.SlicingSpec
 	Traces      [][]df.GraphNode
 }
+
+// SetCoverageWriter is a no-op for a backtrace visitor
+func (v *Visitor) SetCoverageWriter(_ io.StringWriter) {}
 
 // Visit runs an inter-procedural backwards analysis to add any detected backtraces to v.Traces.
 func (v *Visitor) Visit(s *df.AnalyzerState, entrypoint df.NodeWithTrace) {

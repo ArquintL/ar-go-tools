@@ -12,6 +12,7 @@ taint-tracking-problems:
 
 
 # Same as sinks
+
 slicing-problems:
   - backtracepoints:
       - package: "(main)|(command-line-arguments)|(git.amazon.com[[:graph:]]*)$"
@@ -21,3 +22,4 @@ slicing-problems:
 options:
     report-paths: true
     verbose: true
+    report-coverage: true

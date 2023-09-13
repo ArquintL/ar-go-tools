@@ -27,6 +27,9 @@ import (
 // Visitor represents a visitor that runs an inter-procedural analysis from entrypoint.
 type Visitor interface {
 	Visit(s *AnalyzerState, entrypoint NodeWithTrace)
+
+	// SetCoverageWriter sets the writer for generating coverage data using the visitor
+	SetCoverageWriter(writer io.StringWriter)
 }
 
 // InterProceduralFlowGraph represents an inter-procedural data flow graph.
@@ -266,6 +269,7 @@ func (g *InterProceduralFlowGraph) BuildAndRunVisitor(c *AnalyzerState, visitor 
 	// Open the coverage file if specified in configuration
 	coverage := openCoverage(c)
 	if coverage != nil {
+		visitor.SetCoverageWriter(coverage)
 		defer coverage.Close()
 	}
 

@@ -16,6 +16,7 @@ package taint
 
 import (
 	"fmt"
+	"go/token"
 	"io"
 	"os"
 	"sort"
@@ -24,14 +25,44 @@ import (
 	"github.com/awslabs/ar-go-tools/internal/colors"
 )
 
+func genCoverageLine(c *dataflow.AnalyzerState, pos token.Position) (string, error) {
+	if !pos.IsValid() {
+		return "", fmt.Errorf("position not valid")
+	}
+	if pos.Filename == "" {
+		return "", fmt.Errorf("filename is empty")
+	}
+	
+	s := fmt.Sprintf("%s:%d.%d,%d.100 1 1\n", pos.Filename, pos.Line, pos.Column, pos.Line)
+	return s, nil
+}
+
 // addCoverage adds an entry to coverage by properly formatting the position of the visitorNode in the context of
 // the analyzer state
 func addCoverage(c *dataflow.AnalyzerState, elt *dataflow.VisitorNode, coverage map[string]bool) {
+	if coverage == nil {
+		return
+	}
+	// Add coverage data for the position of the node
 	pos := elt.Node.Position(c)
-	if coverage != nil {
-		if c.Config.MatchCoverageFilter(pos.Filename) {
-			s := fmt.Sprintf("%s:%d.1,%d.%d 1 1\n", pos.Filename, pos.Line, pos.Line, pos.Column)
+	if c.Config.MatchCoverageFilter(pos.Filename) {
+		s, err := genCoverageLine(c, pos)
+		if err == nil {
 			coverage[s] = true
+		}
+	}
+	// Add coverage data for all the instructions that are marked by the node. This represents better the positions
+	// that have been visited by the analysis, since those instructions are the ones that were used to compute the
+	// dataflow information. The data represented by the node has flowed to each of those instructions.
+	for instr := range elt.Node.Marks() {
+		pos = c.Program.Fset.Position(instr.Pos())
+		if pos.IsValid() {
+			if c.Config.MatchCoverageFilter(pos.Filename) {
+				s, err := genCoverageLine(c, pos)
+				if err == nil {
+					coverage[s] = true
+				}
+			}
 		}
 	}
 }
