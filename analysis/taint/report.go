@@ -16,25 +16,98 @@ package taint
 
 import (
 	"fmt"
+	"go/ast"
 	"go/token"
 	"io"
 	"os"
+	"reflect"
 	"sort"
 
 	"github.com/awslabs/ar-go-tools/analysis/dataflow"
 	"github.com/awslabs/ar-go-tools/internal/colors"
+	"golang.org/x/tools/go/ssa"
 )
 
-func genCoverageLine(c *dataflow.AnalyzerState, pos token.Position) (string, error) {
+func genCoverageLine(c *dataflow.AnalyzerState, pos, end token.Position) (string, error) {
 	if !pos.IsValid() {
 		return "", fmt.Errorf("position not valid")
 	}
 	if pos.Filename == "" {
 		return "", fmt.Errorf("filename is empty")
 	}
-	
-	s := fmt.Sprintf("%s:%d.%d,%d.100 1 1\n", pos.Filename, pos.Line, pos.Column, pos.Line)
+
+	s := fmt.Sprintf("%s:%d.%d,%d.%d 1 1\n", pos.Filename, pos.Line, pos.Column, end.Line, end.Column)
 	return s, nil
+}
+
+func getObjectPosRange(c *dataflow.AnalyzerState, node dataflow.GraphNode) (start, end token.Position) {
+	fset := c.Program.Fset
+	start = node.Position(c)
+	end = node.Position(c)
+	switch n := node.(type) {
+	case *dataflow.ParamNode:
+		end.Column = start.Column + len(n.SsaNode().Name())
+	case *dataflow.CallNode:
+		return getInstructionPosRange(n.CallSite())
+	case *dataflow.CallNodeArg:
+		if i, ok := n.Value().(ssa.Instruction); ok {
+			return getInstructionPosRange(i)
+		} else {
+			// The argument is not an instruction, but something like a simple variable.
+			// We want the range of the use of that value, not its definition, so we're going to
+			// have to be more clever.
+			fmt.Printf("Couldn't figure out call node arg %v\n", n)
+		}
+	case *dataflow.ReturnValNode:
+		// Get the position of the return value declaration
+		// if we have func f() (anInt int, error), then we should be able to find the ranges
+		//                      ^^^^^
+		//                                 ^^^^^
+
+		f := n.Graph().Parent
+		// For .Syntax to work, we need the
+		if fdec, ok := f.Syntax().(*ast.FuncDecl); ok {
+			returnSlot := fdec.Type.Results.List[n.Index()]
+			start = fset.Position(returnSlot.Pos())
+			end = fset.Position(returnSlot.End())
+			// fmt.Printf("Found funcdecl %v %v\n", start, end)
+		} else if fdec, ok := f.Syntax().(*ast.FuncLit); ok {
+			returnSlot := fdec.Type.Results.List[n.Index()]
+			start = fset.Position(returnSlot.Pos())
+			end = fset.Position(returnSlot.End())
+		}
+	case *dataflow.ClosureNode:
+	case *dataflow.BoundLabelNode:
+	case *dataflow.SyntheticNode:
+	case *dataflow.BoundVarNode:
+	case *dataflow.FreeVarNode:
+		end.Column = start.Column + len(n.SsaNode().Name())
+	case *dataflow.AccessGlobalNode:
+		return getInstructionPosRange(n.Instr())
+	}
+	if start.Column == end.Column {
+		fmt.Printf("Warning, empty range for %v (type: %v)\n", node, reflect.TypeOf(node))
+		end.Column += 1
+	}
+	return
+}
+func getInstructionPosRange(i ssa.Instruction) (start, end token.Position) {
+	if v, ok := i.(ssa.Value); ok {
+		for _, instr := range i.Block().Instrs {
+			if dbg, ok := instr.(*ssa.DebugRef); ok {
+				if dbg.X == v {
+					start = i.Parent().Prog.Fset.Position(dbg.Expr.Pos())
+					end = i.Parent().Prog.Fset.Position(dbg.Expr.End())
+					return start, end
+				}
+			}
+		}
+	}
+	start = i.Parent().Prog.Fset.Position(i.Pos())
+	end = i.Parent().Prog.Fset.Position(i.Pos())
+	end.Column += 1
+	fmt.Printf("Warning, empty range for %v (type: %v)\n", i, reflect.TypeOf(i))
+	return start, end
 }
 
 // addCoverage adds an entry to coverage by properly formatting the position of the visitorNode in the context of
@@ -46,7 +119,8 @@ func addCoverage(c *dataflow.AnalyzerState, elt *dataflow.VisitorNode, coverage 
 	// Add coverage data for the position of the node
 	pos := elt.Node.Position(c)
 	if c.Config.MatchCoverageFilter(pos.Filename) {
-		s, err := genCoverageLine(c, pos)
+		a, b := getObjectPosRange(c, elt.Node)
+		s, err := genCoverageLine(c, a, b)
 		if err == nil {
 			coverage[s] = true
 		}
@@ -58,7 +132,8 @@ func addCoverage(c *dataflow.AnalyzerState, elt *dataflow.VisitorNode, coverage 
 		pos = c.Program.Fset.Position(instr.Pos())
 		if pos.IsValid() {
 			if c.Config.MatchCoverageFilter(pos.Filename) {
-				s, err := genCoverageLine(c, pos)
+				a, b := getInstructionPosRange(instr)
+				s, err := genCoverageLine(c, a, b)
 				if err == nil {
 					coverage[s] = true
 				}
