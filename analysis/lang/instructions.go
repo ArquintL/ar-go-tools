@@ -17,6 +17,8 @@
 package lang
 
 import (
+	"go/token"
+
 	. "github.com/awslabs/ar-go-tools/internal/funcutil"
 	"golang.org/x/tools/go/ssa"
 )
@@ -283,4 +285,13 @@ func FnWritesTo(fn *ssa.Function, val ssa.Value) bool {
 	}
 
 	return false
+}
+
+// InstrPosToPosition is a utility to translate a token.Pos to a token.Position using the parent proogram of the
+// instruction
+func InstrPosToPosition(i ssa.Instruction, pos token.Pos) token.Position {
+	if i == nil {
+		return token.Position{}
+	}
+	return i.Parent().Prog.Fset.Position(pos)
 }

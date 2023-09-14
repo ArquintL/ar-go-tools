@@ -38,7 +38,7 @@ func TestAnalyze(t *testing.T) {
 	_, filename, _, _ := runtime.Caller(0)
 	dir := path.Join(path.Dir(filename), "../../testdata/src/backtrace")
 	// Loading the program for testdata/src/backtrace/main.go
-	program, cfg := analysistest.LoadTest(t, dir, []string{})
+	program, _, cfg := analysistest.LoadTest(t, dir, []string{})
 	defer os.Remove(cfg.ReportsDir)
 
 	testAnalyze(t, cfg, program)
@@ -62,7 +62,7 @@ func TestAnalyze_OnDemand(t *testing.T) {
 	_, filename, _, _ := runtime.Caller(0)
 	dir := path.Join(path.Dir(filename), "../../testdata/src/backtrace")
 	// Loading the program for testdata/src/backtrace/main.go
-	program, cfg := analysistest.LoadTest(t, dir, []string{})
+	program, _, cfg := analysistest.LoadTest(t, dir, []string{})
 	defer os.Remove(cfg.ReportsDir)
 
 	cfg.SummarizeOnDemand = true
@@ -74,7 +74,7 @@ var ignoreMatch = match{-1, nil, -1}
 func testAnalyze(t *testing.T, cfg *config.Config, program *ssa.Program) {
 	cfg.LogLevel = int(config.InfoLevel)
 	lg := config.NewLogGroup(cfg)
-	res, err := backtrace.Analyze(lg, cfg, program)
+	res, err := backtrace.Analyze(lg, cfg, program, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,7 +358,7 @@ func TestAnalyze_Closures(t *testing.T) {
 	_, filename, _, _ := runtime.Caller(0)
 	dir := path.Join(path.Dir(filename), "../../testdata/src/dataflow/closures")
 	// Loading the program for testdata/src/taint/closures/main.go
-	program, cfg := analysistest.LoadTest(t, dir, []string{"helpers.go"})
+	program, _, cfg := analysistest.LoadTest(t, dir, []string{"helpers.go"})
 	defer os.Remove(cfg.ReportsDir)
 
 	testAnalyzeClosures(t, cfg, program)
@@ -368,7 +368,7 @@ func TestAnalyze_Closures_OnDemand(t *testing.T) {
 	_, filename, _, _ := runtime.Caller(0)
 	dir := path.Join(path.Dir(filename), "../../testdata/src/dataflow/closures")
 	// Loading the program for testdata/src/taint/closures/main.go
-	program, cfg := analysistest.LoadTest(t, dir, []string{"helpers.go"})
+	program, _, cfg := analysistest.LoadTest(t, dir, []string{"helpers.go"})
 	defer os.Remove(cfg.ReportsDir)
 
 	cfg.SummarizeOnDemand = true
@@ -378,7 +378,7 @@ func TestAnalyze_Closures_OnDemand(t *testing.T) {
 func testAnalyzeClosures(t *testing.T, cfg *config.Config, program *ssa.Program) {
 	cfg.LogLevel = int(config.InfoLevel) // increasing to level > InfoLevel throws off IDE
 	lg := config.NewLogGroup(cfg)
-	res, err := backtrace.Analyze(lg, cfg, program)
+	res, err := backtrace.Analyze(lg, cfg, program, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -573,7 +573,7 @@ func taintTest(t *testing.T, test testDef, isOnDemand bool, skip map[string]bool
 		t.Fatal("expected sources and sinks to be present")
 	}
 
-	program, cfg := analysistest.LoadTest(t, dir, test.files)
+	program, _, cfg := analysistest.LoadTest(t, dir, test.files)
 	defer os.Remove(cfg.ReportsDir)
 
 	if len(cfg.TaintTrackingProblems) < 1 {
@@ -583,7 +583,7 @@ func taintTest(t *testing.T, test testDef, isOnDemand bool, skip map[string]bool
 	cfg.SummarizeOnDemand = isOnDemand
 	cfg.LogLevel = int(config.DebugLevel)
 	lg := config.NewLogGroup(cfg)
-	res, err := backtrace.Analyze(lg, cfg, program)
+	res, err := backtrace.Analyze(lg, cfg, program, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

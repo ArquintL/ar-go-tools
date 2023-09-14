@@ -16,6 +16,8 @@ package dataflow
 
 import (
 	"fmt"
+	"go/ast"
+	"go/token"
 	"io"
 	"sync"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/awslabs/ar-go-tools/analysis/config"
 	"github.com/awslabs/ar-go-tools/analysis/lang"
 	"github.com/awslabs/ar-go-tools/analysis/summaries"
+	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/pointer"
 	"golang.org/x/tools/go/ssa"
 )
@@ -38,6 +41,9 @@ type AnalyzerState struct {
 
 	// The program to be analyzed. It should be a complete buildable program (e.g. loaded by LoadProgram).
 	Program *ssa.Program
+
+	// The initial packages used to build the program
+	Packages []*packages.Package
 
 	// A map from types to functions implementing that type
 	//
@@ -81,9 +87,9 @@ type AnalyzerState struct {
 //   - scanning the usage of globals in the program
 //   - linking aliases of bound variables to the closure that binds them
 func NewInitializedAnalyzerState(logger *config.LogGroup, config *config.Config,
-	program *ssa.Program) (*AnalyzerState, error) {
+	program *ssa.Program, pack []*packages.Package) (*AnalyzerState, error) {
 	program.Build()
-	state, err := NewAnalyzerState(program, logger, config, []func(*AnalyzerState){
+	state, err := NewAnalyzerState(program, pack, logger, config, []func(*AnalyzerState){
 		func(a *AnalyzerState) { a.PopulateImplementations() },
 		func(a *AnalyzerState) { a.PopulatePointersVerbose(summaries.IsUserDefinedFunction) },
 		func(a *AnalyzerState) { a.PopulateGlobalsVerbose() },
@@ -99,7 +105,7 @@ func NewInitializedAnalyzerState(logger *config.LogGroup, config *config.Config,
 }
 
 // NewAnalyzerState returns a properly initialized analyzer state by running essential steps in parallel.
-func NewAnalyzerState(p *ssa.Program, l *config.LogGroup, c *config.Config,
+func NewAnalyzerState(p *ssa.Program, pack []*packages.Package, l *config.LogGroup, c *config.Config,
 	steps []func(*AnalyzerState)) (*AnalyzerState, error) {
 	var allContracts []Contract
 
@@ -107,6 +113,7 @@ func NewAnalyzerState(p *ssa.Program, l *config.LogGroup, c *config.Config,
 		Logger:                l,
 		Config:                c,
 		Program:               p,
+		Packages:              pack,
 		implementationsByType: map[string]map[*ssa.Function]bool{},
 		DataFlowContracts:     map[string]*SummaryGraph{},
 		keys:                  map[string]string{},
@@ -466,6 +473,24 @@ func (s *AnalyzerState) LoadExternalContractSummary(node *CallNode) *SummaryGrap
 	// Look for a function contract
 	if summary, ok := s.DataFlowContracts[node.callee.Callee.String()]; ok {
 		return summary
+	}
+
+	return nil
+}
+
+func (s *AnalyzerState) GetAstFile(file *token.File) *ast.File {
+	if s == nil || s.Packages == nil || file == nil {
+		return nil
+	}
+	for _, pkg := range s.Packages {
+		for _, astFile := range pkg.Syntax {
+			if astFile == nil {
+				continue
+			}
+			if astFile.FileStart == file.Pos(0) {
+				return astFile
+			}
+		}
 	}
 
 	return nil

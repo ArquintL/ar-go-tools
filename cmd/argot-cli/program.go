@@ -53,7 +53,7 @@ func cmdRebuild(tt *term.Terminal, command Command) bool {
 
 	writeFmt(tt, "Reading sources\n")
 	// Load the program
-	program, err := analysis.LoadProgram(nil, "", buildmode, state.Args)
+	program, pkgs, err := analysis.LoadProgram(nil, "", buildmode, state.Args)
 	if err != nil {
 		WriteErr(tt, "could not load program:\n%s\n", err)
 		return false
@@ -70,7 +70,7 @@ func cmdRebuild(tt *term.Terminal, command Command) bool {
 	newState, err := dataflow.NewInitializedAnalyzerState(
 		state.AnalyzerState.Logger,
 		state.AnalyzerState.Config,
-		program)
+		program, pkgs)
 
 	if err != nil {
 		WriteErr(tt, "error building analyzer state: %s", err)

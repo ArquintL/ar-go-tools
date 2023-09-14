@@ -42,7 +42,7 @@ func TestFindAllElementaryCycles(t *testing.T) {
 		panic(err)
 	}
 
-	program, _ := analysistest.LoadTest(t, ".", []string{})
+	program, _, _ := analysistest.LoadTest(t, ".", []string{})
 
 	pCfg := &pointer.Config{
 		Mains:           ssautil.MainPackages(program.AllPackages()),

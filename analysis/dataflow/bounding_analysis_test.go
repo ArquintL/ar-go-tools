@@ -23,8 +23,8 @@ import (
 )
 
 func TestRunBoundingAnalysis(t *testing.T) {
-	program, cfg := analysistest.LoadTest(t, "../../testdata/src/taint/closures", []string{"helpers.go"})
-	c, err := NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program)
+	program, _, cfg := analysistest.LoadTest(t, "../../testdata/src/taint/closures", []string{"helpers.go"})
+	c, err := NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program, nil)
 	if err != nil {
 		t.Errorf("error building state: %s", err)
 	}

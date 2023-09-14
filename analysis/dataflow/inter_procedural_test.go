@@ -35,9 +35,9 @@ func TestCrossFunctionFlowGraph(t *testing.T) {
 	_, filename, _, _ := runtime.Caller(0)
 	dir := path.Join(path.Dir(filename), "../../testdata/src/dataflow/summaries")
 	// Loading the program for testdata/src/dataflow/summaries/main.go
-	program, _ := analysistest.LoadTest(t, dir, []string{})
+	program, _, _ := analysistest.LoadTest(t, dir, []string{})
 	cfg := config.NewDefault()
-	state, err := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program)
+	state, err := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program, nil)
 	if err != nil {
 		t.Fatalf("failed to build program analysis state: %v", err)
 	}

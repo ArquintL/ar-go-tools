@@ -136,7 +136,7 @@ func main() {
 	logger.Printf(colors.Faint("Reading sources") + "\n")
 	state.Args = flag.Args()
 	// Load the program
-	program, err := analysis.LoadProgram(nil, "", buildmode, flag.Args())
+	program, pkgs, err := analysis.LoadProgram(nil, "", buildmode, flag.Args())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not load program: %v\n", err)
 		return
@@ -150,7 +150,7 @@ func main() {
 	state.InitialPackages = initialPackages
 
 	// Initialize an analyzer state
-	state, err := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(pConfig), pConfig, program)
+	state, err := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(pConfig), pConfig, program, pkgs)
 	if err != nil {
 		panic(err)
 	}

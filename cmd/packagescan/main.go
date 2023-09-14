@@ -107,7 +107,7 @@ func doMain() error {
 	// todo -- technically we could run these in parallel...
 	// (though tbf, the LoadProgram does exploit multiple cores already)
 	for _, platform := range platforms {
-		program, err := analysis.LoadProgram(nil, platform, mode, flag.Args())
+		program, _, err := analysis.LoadProgram(nil, platform, mode, flag.Args())
 		if err != nil {
 			return err
 		}

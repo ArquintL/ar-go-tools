@@ -75,7 +75,7 @@ func TestSimpleEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to switch to dir %v: %v", dir, err)
 	}
-	program, _ := analysistest.LoadTest(t, ".", []string{})
+	program, _, _ := analysistest.LoadTest(t, ".", []string{})
 	result, _ := dataflow.DoPointerAnalysis(program, func(_ *ssa.Function) bool { return true }, true)
 
 	getGraph := func(f string) *EscapeGraph {
@@ -228,10 +228,10 @@ func TestInterproceduralEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to switch to dir %v: %v", dir, err)
 	}
-	program, cfg := analysistest.LoadTest(t, ".", []string{})
+	program, _, cfg := analysistest.LoadTest(t, ".", []string{})
 	cfg.LogLevel = int(config.TraceLevel)
 	// Compute the summaries for everything in the main package
-	state, _ := dataflow.NewAnalyzerState(program, config.NewLogGroup(cfg), cfg,
+	state, _ := dataflow.NewAnalyzerState(program, nil, config.NewLogGroup(cfg), cfg,
 		[]func(*dataflow.AnalyzerState){
 			func(s *dataflow.AnalyzerState) { s.PopulatePointersVerbose(summaries.IsUserDefinedFunction) },
 		})
@@ -294,10 +294,10 @@ func TestBuiltinsEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to switch to dir %v: %v", dir, err)
 	}
-	program, cfg := analysistest.LoadTest(t, ".", []string{})
+	program, _, cfg := analysistest.LoadTest(t, ".", []string{})
 	cfg.LogLevel = int(config.TraceLevel)
 	// Compute the summaries for everything in the main package
-	cache, _ := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program)
+	cache, _ := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program, nil)
 	escapeWholeProgram, err := EscapeAnalysis(cache, cache.PointerAnalysis.CallGraph.Root)
 	if err != nil {
 		t.Fatalf("Error: %v\n", err)
@@ -602,10 +602,10 @@ func TestLocalityComputation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to switch to dir %v: %v", dir, err)
 	}
-	program, cfg := testutils.LoadTest(t, ".", []string{})
+	program, _, cfg := testutils.LoadTest(t, ".", []string{})
 	cfg.LogLevel = int(config.DebugLevel)
 	// Compute the summaries for everything in the main package
-	cache, _ := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program)
+	cache, _ := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program, nil)
 	escapeWholeProgram, err := EscapeAnalysis(cache, cache.PointerAnalysis.CallGraph.Root)
 	if err != nil {
 		t.Fatalf("Error: %v\n", err)

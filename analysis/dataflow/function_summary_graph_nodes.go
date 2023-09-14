@@ -26,6 +26,9 @@ import (
 	"golang.org/x/tools/go/ssa"
 )
 
+// A LocSet represents the set of location that can be linked to a node. The interpretation of the LocSet depends
+// on the context.
+// In its current implementation, it is simply a set of instructions.
 type LocSet = map[ssa.Instruction]bool
 
 // ObjectPath contains information relative to the object pointed to.
@@ -96,6 +99,7 @@ type IndexedGraphNode interface {
 	Index() int
 }
 
+// NodeKind returns a short 7-character string representation of the node type
 func NodeKind(g GraphNode) string {
 	switch g.(type) {
 	case *ParamNode:
@@ -122,6 +126,7 @@ func NodeKind(g GraphNode) string {
 	return ""
 }
 
+// NodeSummary returns a short string summary of the node
 func NodeSummary(g GraphNode) string {
 	switch x := g.(type) {
 	case *ParamNode:

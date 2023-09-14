@@ -33,6 +33,7 @@ import (
 	"github.com/awslabs/ar-go-tools/internal/colors"
 	"github.com/awslabs/ar-go-tools/internal/funcutil"
 	"golang.org/x/tools/go/callgraph"
+	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/ssa"
 )
 
@@ -80,14 +81,18 @@ func (n TraceNode) String() string {
 //
 // - prog is the built ssa representation of the program. The program must contain a main package and include all its
 // dependencies, otherwise the pointer analysis will fail.
-func Analyze(logger *config.LogGroup, cfg *config.Config, prog *ssa.Program) (AnalysisResult, error) {
+//
+// - packages is the set of initial packages used to build the program. This is used only for better display of
+// debugging information, and is safe to omit
+func Analyze(logger *config.LogGroup, cfg *config.Config, prog *ssa.Program,
+	p []*packages.Package) (AnalysisResult, error) {
 	// Number of working routines to use in parallel. TODO: make this an option?
 	numRoutines := runtime.NumCPU() - 1
 	if numRoutines <= 0 {
 		numRoutines = 1
 	}
 
-	state, err := df.NewInitializedAnalyzerState(logger, cfg, prog)
+	state, err := df.NewInitializedAnalyzerState(logger, cfg, prog, p)
 	if err != nil {
 		return AnalysisResult{}, err
 	}

@@ -36,7 +36,7 @@ func loadConcurrencyTestResult(t *testing.T, subDir string) AnalysisResult {
 		panic(err)
 	}
 
-	program, cfg := analysistest.LoadTest(t, ".", []string{})
+	program, _, cfg := analysistest.LoadTest(t, ".", []string{})
 	lg := config.NewLogGroup(cfg)
 	ar, err := Analyze(lg, cfg, program)
 	if err != nil {

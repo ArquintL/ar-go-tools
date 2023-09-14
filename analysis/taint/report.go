@@ -20,13 +20,19 @@ import (
 	"go/token"
 	"io"
 	"os"
-	"reflect"
 	"sort"
 
 	"github.com/awslabs/ar-go-tools/analysis/dataflow"
+	"github.com/awslabs/ar-go-tools/analysis/lang"
 	"github.com/awslabs/ar-go-tools/internal/colors"
+	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/ssa"
 )
+
+type positionRange struct {
+	Start token.Position
+	End   token.Position
+}
 
 func genCoverageLine(c *dataflow.AnalyzerState, pos, end token.Position) (string, error) {
 	if !pos.IsValid() {
@@ -40,24 +46,41 @@ func genCoverageLine(c *dataflow.AnalyzerState, pos, end token.Position) (string
 	return s, nil
 }
 
-func getObjectPosRange(c *dataflow.AnalyzerState, node dataflow.GraphNode) (start, end token.Position) {
-	fset := c.Program.Fset
-	start = node.Position(c)
-	end = node.Position(c)
+func getObjectPosRanges(c *dataflow.AnalyzerState, node dataflow.GraphNode) []positionRange {
+	fileSet := c.Program.Fset
+	start := node.Position(c)
+	end := node.Position(c)
 	switch n := node.(type) {
 	case *dataflow.ParamNode:
 		end.Column = start.Column + len(n.SsaNode().Name())
+		return []positionRange{{start, end}}
+
 	case *dataflow.CallNode:
-		return getInstructionPosRange(n.CallSite())
-	case *dataflow.CallNodeArg:
-		if i, ok := n.Value().(ssa.Instruction); ok {
-			return getInstructionPosRange(i)
-		} else {
-			// The argument is not an instruction, but something like a simple variable.
-			// We want the range of the use of that value, not its definition, so we're going to
-			// have to be more clever.
-			fmt.Printf("Couldn't figure out call node arg %v\n", n)
+		positions := getInstructionPosRanges(c, n.CallSite())
+		// also add lhs if callNode is a non-go or defer call
+		if callVal := n.CallSite().Value(); callVal != nil {
+			if res := getInstructionValuePosRanges(n.CallSite(), callVal); res != nil {
+				positions = append(positions, res...)
+			}
 		}
+		return positions
+
+	case *dataflow.CallNodeArg:
+		var positions []positionRange
+		if i, ok := n.Value().(ssa.Instruction); ok {
+			positions = append(positions, getInstructionPosRanges(c, i)...)
+		}
+
+		if call := n.ParentNode().CallSite().Value(); call != nil {
+			maybeStart, maybeEnd, err := getCallArgPosRange(call, n.Index())
+			if err == nil {
+				positions = append(positions, positionRange{maybeStart, maybeEnd})
+			}
+		}
+		if len(positions) > 0 {
+			return positions
+		}
+
 	case *dataflow.ReturnValNode:
 		// Get the position of the return value declaration
 		// if we have func f() (anInt int, error), then we should be able to find the ranges
@@ -68,46 +91,98 @@ func getObjectPosRange(c *dataflow.AnalyzerState, node dataflow.GraphNode) (star
 		// For .Syntax to work, we need the
 		if fdec, ok := f.Syntax().(*ast.FuncDecl); ok {
 			returnSlot := fdec.Type.Results.List[n.Index()]
-			start = fset.Position(returnSlot.Pos())
-			end = fset.Position(returnSlot.End())
-			// fmt.Printf("Found funcdecl %v %v\n", start, end)
+			start = fileSet.Position(returnSlot.Pos())
+			end = fileSet.Position(returnSlot.End())
 		} else if fdec, ok := f.Syntax().(*ast.FuncLit); ok {
 			returnSlot := fdec.Type.Results.List[n.Index()]
-			start = fset.Position(returnSlot.Pos())
-			end = fset.Position(returnSlot.End())
+			start = fileSet.Position(returnSlot.Pos())
+			end = fileSet.Position(returnSlot.End())
 		}
+
 	case *dataflow.ClosureNode:
+		return getInstructionPosRanges(c, n.Instr())
+
 	case *dataflow.BoundLabelNode:
+		return getInstructionPosRanges(c, n.Instr())
+
 	case *dataflow.SyntheticNode:
+
 	case *dataflow.BoundVarNode:
+		if i, ok := n.Value().(ssa.Instruction); ok {
+			return getInstructionPosRanges(c, i)
+		} else {
+			c.Logger.Tracef("Couldn't figure out bound variable node %v\n", n)
+		}
+
 	case *dataflow.FreeVarNode:
 		end.Column = start.Column + len(n.SsaNode().Name())
+
 	case *dataflow.AccessGlobalNode:
-		return getInstructionPosRange(n.Instr())
+		return getInstructionPosRanges(c, n.Instr())
 	}
-	if start.Column == end.Column {
-		fmt.Printf("Warning, empty range for %v (type: %v)\n", node, reflect.TypeOf(node))
-		end.Column += 1
+	if start.Column >= end.Column {
+		end.Column += 4
 	}
-	return
+	return []positionRange{{start, end}}
 }
-func getInstructionPosRange(i ssa.Instruction) (start, end token.Position) {
+
+// getInstructionPosRanges returns the position ranges of the instruction i, using either the value of the instructions
+// or the information in the packages of the analyzer state, if available.
+func getInstructionPosRanges(c *dataflow.AnalyzerState, i ssa.Instruction) []positionRange {
 	if v, ok := i.(ssa.Value); ok {
-		for _, instr := range i.Block().Instrs {
-			if dbg, ok := instr.(*ssa.DebugRef); ok {
-				if dbg.X == v {
-					start = i.Parent().Prog.Fset.Position(dbg.Expr.Pos())
-					end = i.Parent().Prog.Fset.Position(dbg.Expr.End())
-					return start, end
+		if res := getInstructionValuePosRanges(i, v); res != nil {
+			return res
+		}
+	}
+	start := lang.InstrPosToPosition(i, i.Pos())
+	end := start
+	end.Column += 4 // default value to capture positions around
+
+	// attempt to get position information from the AST
+	astFile := c.GetAstFile(i.Parent().Prog.Fset.File(i.Pos()))
+	if astFile != nil {
+		astNode, _ := astutil.PathEnclosingInterval(astFile, i.Pos(), i.Pos()+1)
+		if len(astNode) > 0 {
+			return []positionRange{{lang.InstrPosToPosition(i, astNode[0].Pos()),
+				lang.InstrPosToPosition(i, astNode[0].End())}}
+		}
+	}
+	return []positionRange{{start, end}}
+}
+
+// getInstructionValuePosRanges returns the position ranges of the value v, using the instruction's information
+// to determine parent block and parent program.
+func getInstructionValuePosRanges(i ssa.Instruction, v ssa.Value) []positionRange {
+	for _, instr := range i.Block().Instrs {
+		if dbg, ok := instr.(*ssa.DebugRef); ok {
+			if dbg.X == v {
+				return []positionRange{{lang.InstrPosToPosition(i, dbg.Expr.Pos()),
+					lang.InstrPosToPosition(i, dbg.Expr.End())}}
+			}
+		}
+	}
+	return nil
+}
+
+// getCallArgPosRange returns the position range of the argument number argPos in the call c
+func getCallArgPosRange(c *ssa.Call, argPos int) (token.Position, token.Position, error) {
+	for _, instr := range c.Block().Instrs {
+		if dbg, ok := instr.(*ssa.DebugRef); ok {
+			if dbg.X == c {
+				switch expr := dbg.Expr.(type) {
+				case *ast.CallExpr:
+					if len(expr.Args) > argPos {
+						return c.Parent().Prog.Fset.Position(expr.Args[argPos].Pos()),
+							c.Parent().Prog.Fset.Position(expr.Args[argPos].End()),
+							nil
+					} else {
+						return token.Position{}, token.Position{}, fmt.Errorf("bad argument position")
+					}
 				}
 			}
 		}
 	}
-	start = i.Parent().Prog.Fset.Position(i.Pos())
-	end = i.Parent().Prog.Fset.Position(i.Pos())
-	end.Column += 1
-	fmt.Printf("Warning, empty range for %v (type: %v)\n", i, reflect.TypeOf(i))
-	return start, end
+	return token.Position{}, token.Position{}, fmt.Errorf("did not find valid positions")
 }
 
 // addCoverage adds an entry to coverage by properly formatting the position of the visitorNode in the context of
@@ -119,10 +194,12 @@ func addCoverage(c *dataflow.AnalyzerState, elt *dataflow.VisitorNode, coverage 
 	// Add coverage data for the position of the node
 	pos := elt.Node.Position(c)
 	if c.Config.MatchCoverageFilter(pos.Filename) {
-		a, b := getObjectPosRange(c, elt.Node)
-		s, err := genCoverageLine(c, a, b)
-		if err == nil {
-			coverage[s] = true
+		positions := getObjectPosRanges(c, elt.Node)
+		for _, pRange := range positions {
+			s, err := genCoverageLine(c, pRange.Start, pRange.End)
+			if err == nil {
+				coverage[s] = true
+			}
 		}
 	}
 	// Add coverage data for all the instructions that are marked by the node. This represents better the positions
@@ -132,10 +209,12 @@ func addCoverage(c *dataflow.AnalyzerState, elt *dataflow.VisitorNode, coverage 
 		pos = c.Program.Fset.Position(instr.Pos())
 		if pos.IsValid() {
 			if c.Config.MatchCoverageFilter(pos.Filename) {
-				a, b := getInstructionPosRange(instr)
-				s, err := genCoverageLine(c, a, b)
-				if err == nil {
-					coverage[s] = true
+				positions := getInstructionPosRanges(c, instr)
+				for _, pRange := range positions {
+					s, err := genCoverageLine(c, pRange.Start, pRange.End)
+					if err == nil {
+						coverage[s] = true
+					}
 				}
 			}
 		}

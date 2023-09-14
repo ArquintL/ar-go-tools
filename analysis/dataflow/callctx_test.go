@@ -29,8 +29,8 @@ import (
 func TestComputeCtxts(t *testing.T) {
 	_, filename, _, _ := runtime.Caller(0)
 	dir := path.Join(path.Dir(filename), "../../testdata/src/dataflow/callctx")
-	program, cfg := analysistest.LoadTest(t, dir, []string{})
-	state, err := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program)
+	program, _, cfg := analysistest.LoadTest(t, dir, []string{})
+	state, err := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, program, nil)
 	if err != nil {
 		t.Fatalf("error building state: %s", err)
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/awslabs/ar-go-tools/analysis/config"
 	"github.com/awslabs/ar-go-tools/analysis/dataflow"
 	"github.com/awslabs/ar-go-tools/analysis/escape"
+	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/ssa"
 )
 
@@ -49,7 +50,10 @@ type AnalysisResult struct {
 //
 // - prog is the built ssa representation of the program. The program must contain a main package and include all its
 // dependencies, otherwise the pointer analysis will fail.
-func Analyze(cfg *config.Config, prog *ssa.Program) (AnalysisResult, error) {
+//
+// - packages is the set of initial packages used to build the program. This is used only for better display of
+// debugging information, and is safe to omit
+func Analyze(cfg *config.Config, prog *ssa.Program, p []*packages.Package) (AnalysisResult, error) {
 	// Number of working routines to use in parallel. TODO: make this an option?
 	numRoutines := runtime.NumCPU() - 1
 	if numRoutines <= 0 {
@@ -62,7 +66,7 @@ func Analyze(cfg *config.Config, prog *ssa.Program) (AnalysisResult, error) {
 	// or from the standard library that is called in the program should be summarized in the summaries package.
 	// - Running the type analysis to map functions to their type
 
-	state, err := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, prog)
+	state, err := dataflow.NewInitializedAnalyzerState(config.NewLogGroup(cfg), cfg, prog, p)
 	if err != nil {
 		return AnalysisResult{}, err
 	}

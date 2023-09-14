@@ -92,7 +92,7 @@ func doMain() error {
 
 	fmt.Fprintf(os.Stderr, colors.Faint("Reading sources")+"\n")
 
-	program, err := analysis.LoadProgram(cfg, "", mode, flag.Args())
+	program, _, err := analysis.LoadProgram(cfg, "", mode, flag.Args())
 	if err != nil {
 		return err
 	}
